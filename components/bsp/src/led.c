@@ -1,3 +1,7 @@
+/**
+ * @file led.c
+ * @brief RGB LED control and effect implementations.
+ */
 #include <stdint.h>
 #include <stdbool.h>
 #include "bsp.h"
@@ -6,7 +10,14 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-// funtion: GPIO initialitation 
+/**
+ * @brief Initializes the RGB LED GPIO and LEDC timer/channel configurations.
+ * 
+ * Configures the GPIO direction and sets up the LEDC timer and channels 
+ * for PWM control of the RGB LED. Also spawns the led_effect_task.
+ *
+ * @return esp_err_t ESP_OK on success, or ESP_ERR_INVALID_ARG on failure.
+ */
 esp_err_t init_RGB_led(void)
 {
     // pin reset for RED color
@@ -82,6 +93,11 @@ esp_err_t init_RGB_led(void)
     return ESP_OK;
 }
 
+/**
+ * @brief Turns off the RGB LED by setting the respective GPIO levels to High (off state).
+ * 
+ * @return esp_err_t ESP_OK on success, or ESP_ERR_INVALID_ARG upon failure.
+ */
 esp_err_t turn_off_RGB_led(void)
 {
     // off RED color
@@ -106,6 +122,11 @@ esp_err_t turn_off_RGB_led(void)
     return ESP_OK;   
 }
 
+/**
+ * @brief Turns on the RGB LED by setting the respective GPIO levels to Low (on state).
+ * 
+ * @return esp_err_t ESP_OK on success, or ESP_ERR_INVALID_ARG upon failure.
+ */
 esp_err_t turn_on_RGB_led(void)
 {
     // off RED color
@@ -131,12 +152,26 @@ esp_err_t turn_on_RGB_led(void)
 }
 
 
+/**
+ * @brief Controls a single color channel of the RGB LED.
+ * 
+ * @param gpio_num The GPIO number of the color channel.
+ * @param level The desired logical level (true for ON, false for OFF).
+ * @return esp_err_t ESP_OK on success, or ESP_ERR_INVALID_ARG upon failure.
+ */
 esp_err_t control_single_color_RGB_led(gpio_num_t gpio_num, bool level)
 {
     return gpio_set_level(gpio_num, !level);  
 }
 
 
+/**
+ * @brief Sets the duty cycle for the RGB LED via LEDC.
+ * 
+ * @param r Red duty cycle value (0-255).
+ * @param g Green duty cycle value (0-255).
+ * @param b Blue duty cycle value (0-255).
+ */
 void bsp_led_set(uint8_t r, uint8_t g, uint8_t b) {
     ledc_set_duty(LEDC_LOW_SPEED_MODE, BSP_LED_CH_R, 255 - r);
     ledc_set_duty(LEDC_LOW_SPEED_MODE, BSP_LED_CH_G, 255 - g);
@@ -146,6 +181,11 @@ void bsp_led_set(uint8_t r, uint8_t g, uint8_t b) {
     ledc_update_duty(LEDC_LOW_SPEED_MODE, BSP_LED_CH_B);
 }
 
+/**
+ * @brief FreeRTOS task handling a breathing effect for the RGB LED.
+ * 
+ * @param pvParameters Pointer to task parameters (not used).
+ */
 void led_effect_task(void *pvParameters) {
     uint8_t hue = 0;
     bool dir = true;
