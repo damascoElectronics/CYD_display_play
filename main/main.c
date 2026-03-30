@@ -3,10 +3,6 @@
 #include "freertos/task.h"
 #include "driver/gpio.h"
 
-#define BSP_LED_R        4
-#define BSP_LED_G       16
-#define BSP_LED_B       17
-
 void app_main(void)
 {
     printf("led \n");
