@@ -1,4 +1,0 @@
-dependencies:
-  idf: ">=5.0"
-  espressif/esp_lcd_ili9341:
-    version: "*"
