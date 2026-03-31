@@ -73,4 +73,23 @@ void bsp_led_set(uint8_t r, uint8_t g, uint8_t b);
  */
 void led_effect_task(void *pvParameters);
 
+
+
+/**
+ * @brief Initializes the display and configure it for its use.
+ * 
+ * Configures the screen to it use.
+ * 
+ *
+ * @return esp_err_t ESP_OK on success, or ESP_ERR_INVALID_ARG on failure.
+ */
+esp_err_t init_display_led(void);
+
+/**
+ * @brief Sets the duty cycle for the backlight screen via LEDC.
+ * 
+ * @param backlight backlight duty cycle value (0-255).
+ */
+void bsp_backlight_set(uint8_t backlight);
+
 #endif
