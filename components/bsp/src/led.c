@@ -73,7 +73,6 @@ esp_err_t init_RGB_led(void)
         // if there is an error, return ESP_ERR_INVALID_ARG
         return ESP_ERR_INVALID_ARG;
     }
-    // if all goes well, return ESP_OK
 
     ledc_timer_config_t timer = {
         .speed_mode      = LEDC_LOW_SPEED_MODE,
@@ -103,7 +102,9 @@ esp_err_t init_RGB_led(void)
     }
 
     xTaskCreate(led_effect_task, "led_effect", 4096, NULL, 5, NULL);
-
+    // turn off before start to use.
+    turn_off_RGB_led();
+    // if all goes well, return ESP_OK
 
     return ESP_OK;
 }

@@ -11,9 +11,6 @@ void app_main(void)
 {
     printf("led init\n");
     init_RGB_led();
-    printf("led off\n");
-    turn_off_RGB_led();
-
 
 
 
