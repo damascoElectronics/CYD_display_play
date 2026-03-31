@@ -12,14 +12,6 @@ void app_main(void)
     printf("led init\n");
     init_RGB_led();
 
-
-
-    printf("Backlight ON\n");
-
-    while (1) {
-
-             
-
-    }
+    while (1);
 
 }
