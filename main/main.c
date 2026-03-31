@@ -11,5 +11,11 @@ void app_main(void)
 {
     printf("init program\n");
     init_RGB_led();
+<<<<<<< HEAD
     while (1);
+=======
+
+    while (1);
+
+>>>>>>> 76f28646b5ac5250a066b46a3970e7e0089215db
 }
