@@ -255,6 +255,6 @@ void led_effect_task(void *pvParameters) {
             break;
         }
         count ++;
-        vTaskDelay(pdMS_TO_TICKS(40));
+        vTaskDelay(pdMS_TO_TICKS(30));
     }
 }   
