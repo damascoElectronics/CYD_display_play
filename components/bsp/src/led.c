@@ -11,6 +11,21 @@
 #include "freertos/task.h"
 
 /**
+ * @brief Heartbeat curve representing PWM values (0-255).
+ * 
+ * Contains a sequence to simulate two quick peaks followed by a pause.
+ */
+static const uint8_t heartbeat_curve[] = {
+    0,  10,  30,  60, 100, 150, 200, 240, 255, 220,  // peak rise 1
+  170, 110,  60,  80, 120, 170, 210, 240, 220, 180,  // descent + ascent peak 2
+  130,  80,  40,  15,   5,   0,   0,   0,   0,   0,  // down + pause
+    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  // long pause
+};
+
+/** @brief Total number of steps in the heartbeat curve array */
+#define HEARTBEAT_STEPS  (sizeof(heartbeat_curve) / sizeof(heartbeat_curve[0]))
+
+/**
  * @brief Initializes the RGB LED GPIO and LEDC timer/channel configurations.
  * 
  * Configures the GPIO direction and sets up the LEDC timer and channels 
@@ -182,38 +197,63 @@ void bsp_led_set(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 /**
- * @brief FreeRTOS task handling a breathing effect for the RGB LED.
+ * @brief Call this function periodically (e.g., every 20ms) to 
+ *        obtain the next PWM value of the heartbeat effect.
+ *
+ * @return uint8_t  PWM value [0-255]
+ */
+uint8_t heartbeat_tick(void)
+{
+    static uint16_t step = 0;
+
+    uint8_t pwm_val = heartbeat_curve[step];
+
+    step++;
+    if (step >= HEARTBEAT_STEPS)
+        step = 0;
+
+    return pwm_val;
+}
+
+
+/**
+ * @brief FreeRTOS task handling a heartbeat effect for the RGB LED.
+ * 
+ * Cycles the heartbeat pattern through the Red, Green, and Blue channels.
  * 
  * @param pvParameters Pointer to task parameters (not used).
  */
 void led_effect_task(void *pvParameters) {
     uint8_t hue = 0;
-    bool dir = true;
+    uint8_t count = 0;
+    uint8_t dir = 1;
+
     while (1) {
-        bsp_led_set(hue, 255 - hue, 128);
-        
-        switch (hue)
+        hue = heartbeat_tick();
+        if (count >= HEARTBEAT_STEPS)
         {
-            case 0:
-                dir = true;
-                break;
-            case 255:
-                dir = false;
-                break;
-            default:
-                break;
+            count = 0;
+            dir = dir << 1;
         }
 
-        if (dir)
+        switch (dir)
         {
-            hue++;
+        case 1:
+            bsp_led_set(hue, 0, 0);
+            break;
+        case 2:
+            bsp_led_set(0, hue, 0);
+            break;
+        case 4:
+            bsp_led_set(0, 0, hue);
+            break;
+        case 8:
+            dir = 1;
+            break;
+        default:
+            break;
         }
-        else{
-            hue--;
-            
-        }
-        
-        
-        vTaskDelay(pdMS_TO_TICKS(20));
+        count ++;
+        vTaskDelay(pdMS_TO_TICKS(40));
     }
-}
+}   
