@@ -100,12 +100,9 @@ esp_err_t init_RGB_led(void)
         };
         ESP_ERROR_CHECK(ledc_channel_config(&ch));
     }
-
+    // creating and starting task
     xTaskCreate(led_effect_task, "led_effect", 4096, NULL, 5, NULL);
-    // turn off before start to use.
-    turn_off_RGB_led();
     // if all goes well, return ESP_OK
-
     return ESP_OK;
 }
 
@@ -116,24 +113,7 @@ esp_err_t init_RGB_led(void)
  */
 esp_err_t turn_off_RGB_led(void)
 {
-    // off RED color
-    if (gpio_set_level(BSP_LED_R, 1) == ESP_ERR_INVALID_ARG)
-    {
-        // if there is an error, return ESP_ERR_INVALID_ARG
-        return ESP_ERR_INVALID_ARG;
-    }
-    // off GREEN color
-    if (gpio_set_level(BSP_LED_G, 1) == ESP_ERR_INVALID_ARG)
-    {
-        // if there is an error, return ESP_ERR_INVALID_ARG
-        return ESP_ERR_INVALID_ARG;
-    }
-    // off BLUE color
-    if (gpio_set_level(BSP_LED_B, 1) == ESP_ERR_INVALID_ARG)
-    {
-        // if there is an error, return ESP_ERR_INVALID_ARG
-        return ESP_ERR_INVALID_ARG;
-    }
+    bsp_led_set(0, 0, 0);
     // if all goes well, return ESP_OK
     return ESP_OK;   
 }
@@ -145,24 +125,7 @@ esp_err_t turn_off_RGB_led(void)
  */
 esp_err_t turn_on_RGB_led(void)
 {
-    // off RED color
-    if (gpio_set_level(BSP_LED_R, 0) == ESP_ERR_INVALID_ARG)
-    {
-        // if there is an error, return ESP_ERR_INVALID_ARG
-        return ESP_ERR_INVALID_ARG;
-    }
-    // off GREEN color
-    if (gpio_set_level(BSP_LED_G, 0) == ESP_ERR_INVALID_ARG)
-    {
-        // if there is an error, return ESP_ERR_INVALID_ARG
-        return ESP_ERR_INVALID_ARG;
-    }
-    // off BLUE color
-    if (gpio_set_level(BSP_LED_B, 0) == ESP_ERR_INVALID_ARG)
-    {
-        // if there is an error, return ESP_ERR_INVALID_ARG
-        return ESP_ERR_INVALID_ARG;
-    }
+    bsp_led_set(255, 255, 255);
     // if all goes well, return ESP_OK
     return ESP_OK;   
 }
@@ -226,35 +189,10 @@ uint8_t heartbeat_tick(void)
  */
 void led_effect_task(void *pvParameters) {
     uint8_t hue = 0;
-    uint8_t count = 0;
-    uint8_t dir = 1;
 
     while (1) {
         hue = heartbeat_tick();
-        if (count >= HEARTBEAT_STEPS)
-        {
-            count = 0;
-            dir = dir << 1;
-        }
-
-        switch (dir)
-        {
-        case 1:
-            bsp_led_set(hue, 0, 0);
-            break;
-        case 2:
-            bsp_led_set(0, hue, 0);
-            break;
-        case 4:
-            bsp_led_set(0, 0, hue);
-            break;
-        case 8:
-            dir = 1;
-            break;
-        default:
-            break;
-        }
-        count ++;
+        bsp_led_set(hue, hue, hue);
         vTaskDelay(pdMS_TO_TICKS(30));
     }
 }   
