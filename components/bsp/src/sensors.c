@@ -1,3 +1,7 @@
+/**
+ * @file sensors.c
+ * @brief Implementations for board sensors (e.g., LDR ADC reads, conversions, filtering).
+ */
 #include <stdint.h>
 #include <stdbool.h>
 #include "bsp.h"
@@ -13,10 +17,18 @@
 /** @brief Alpha value for the Exponential Moving Average filter */
 #define EMA_ALPHA    0.3f
 
+/** @brief ADC Oneshot unit handle used for LDR readings */
 static adc_oneshot_unit_handle_t adc_handle = NULL;
+/** @brief ADC Calibration handle to convert raw readings to voltage */
 static adc_cali_handle_t         cali_handle = NULL;
+/** @brief State variable to keep track of the Exponential Moving Average (EMA) */
 static float                     ema_value = 2048.0f;
 
+/**
+ * @brief Initializes the LDR ADC unit, channel, and calibration scheme.
+ * 
+ * @return esp_err_t ESP_OK if setup completes successfully, or an error code otherwise.
+ */
 esp_err_t bsp_ldr_init(void) {
     adc_oneshot_unit_init_cfg_t unit_cfg = {
         .unit_id  = BSP_LDR_UNIT,
@@ -52,7 +64,11 @@ esp_err_t bsp_ldr_init(void) {
 
 // -- Internal functions first --
 
-// Raw ADC reading
+/**
+ * @brief Gets a single raw reading directly from the ADC unit.
+ * 
+ * @return int Raw ADC value read (0-4095). Returns 0 if uninitialized.
+ */
 static int ldr_read_raw(void) {
     if (adc_handle == NULL) {
         return 0;
@@ -62,7 +78,14 @@ static int ldr_read_raw(void) {
     return raw;
 }
 
-// Average of N samples
+/**
+ * @brief Samples the LDR multiple times and calculates an average.
+ * 
+ * Takes `LDR_SAMPLES` samples with a small 2ms delay between each to provide
+ * a slightly filtered baseline.
+ * 
+ * @return int The averaged raw value.
+ */
 static int ldr_read_avg(void) {
     int sum = 0;
     for (int i = 0; i < LDR_SAMPLES; i++) {
@@ -74,12 +97,28 @@ static int ldr_read_avg(void) {
 
 // -- Public API --
 
+/**
+ * @brief Public getter for the filtered LDR value.
+ * 
+ * Leverages an Exponential Moving Average (EMA) on top of an averaged reading to 
+ * provide a robust and non-jittering sensor readout.
+ * 
+ * @return int The filtered LDR value (0-4095).
+ */
 int bsp_ldr_read(void) {
     int avg = ldr_read_avg();
     ema_value = EMA_ALPHA * avg + (1.0f - EMA_ALPHA) * ema_value;
     return (int)ema_value;
 }
 
+/**
+ * @brief Public getter for the LDR voltage in millivolts.
+ * 
+ * Reads the filtered LDR raw value and extrapolates the equivalent hardware voltage 
+ * utilizing the ESP ADC calibration.
+ * 
+ * @return int Calibration-adjusted voltage reading in mV. Returns 0 if calibration failed or uninitialized.
+ */
 int bsp_ldr_read_mv(void) {
     if (cali_handle == NULL) return 0;
     int mv = 0;

@@ -22,6 +22,12 @@ static uint8_t target_brightness  = 255;
 /** @brief Interval between brightness changes in milliseconds */
 #define RAMP_MS    20     // how often do the changes in ms
 
+/** @brief Macro to find the minimum of two values */
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+/** @brief Macro to find the maximum of two values */
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
+static uint8_t step_toward(uint8_t current, uint8_t target, uint8_t step);
 
 /**
  * @brief Initializes the display and configure it for its use.
@@ -118,6 +124,23 @@ static uint8_t get_target_brightness(void) {
 }
 
 /**
+ * @brief Steps a current value closer to a target value by at most a specified step size.
+ * 
+ * Takes care of both increasing and decreasing the value, while ensuring it never 
+ * overshoots the target.
+ * 
+ * @param current The current value.
+ * @param target The requested target value.
+ * @param step The maximum change allowed in this step.
+ * @return uint8_t The new value, closer to or equal to the target.
+ */
+static uint8_t step_toward(uint8_t current, uint8_t target, uint8_t step) {
+    if (current < target) return MIN(current + step, target);
+    if (current > target) return MAX(current - step, target);
+    return current;
+}
+
+/**
  * @brief FreeRTOS task that manages smooth backlight brightness transitions.
  * 
  * This task constantly runs and updates the backlight duty cycle towards the
@@ -126,28 +149,20 @@ static uint8_t get_target_brightness(void) {
  * @param pvParameters Task parameters (not used).
  */
 void backlight_task(void *pvParameters) {
-
     uint8_t new_target;
 
     while (1) {
         new_target = (uint8_t)(255 - (bsp_ldr_read() * 255 / 4095));
-        if (abs((int)new_target - (int)get_target_brightness()) > 5) 
-        {
+        
+        uint8_t t = get_target_brightness();
+        if (abs((int)new_target - (int)t) > 5) {
             bsp_backlight_set_target(new_target);
-        }
-        printf("new_target: %d\n",new_target);
-
-        if (current_brightness < target_brightness) {
-            current_brightness += RAMP_STEP;
-            if (current_brightness > target_brightness)
-                current_brightness = target_brightness;
-        } else if (current_brightness > target_brightness) {
-            current_brightness -= RAMP_STEP;
-            if (current_brightness < target_brightness)
-                current_brightness = target_brightness;
+            t = new_target;
         }
 
+        current_brightness = step_toward(current_brightness, t, RAMP_STEP);
         bsp_backlight_set(current_brightness);
         vTaskDelay(pdMS_TO_TICKS(RAMP_MS));
     }
 }
+
