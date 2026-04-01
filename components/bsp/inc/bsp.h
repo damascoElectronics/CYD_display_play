@@ -74,7 +74,6 @@ void bsp_led_set(uint8_t r, uint8_t g, uint8_t b);
 void led_effect_task(void *pvParameters);
 
 
-
 /**
  * @brief Initializes the display and configure it for its use.
  * 
@@ -83,7 +82,7 @@ void led_effect_task(void *pvParameters);
  *
  * @return esp_err_t ESP_OK on success, or ESP_ERR_INVALID_ARG on failure.
  */
-esp_err_t init_display_led(void);
+esp_err_t init_display(void);
 
 /**
  * @brief Sets the duty cycle for the backlight screen via LEDC.
@@ -91,5 +90,21 @@ esp_err_t init_display_led(void);
  * @param backlight backlight duty cycle value (0-255).
  */
 void bsp_backlight_set(uint8_t backlight);
+
+/**
+ * @brief FreeRTOS task that manages smooth backlight brightness transitions.
+ * 
+ * @param pvParameters Task parameters (not used).
+ */
+void backlight_task(void *pvParameters);
+
+/**
+ * @brief Sets the target brightness for the backlight.
+ * 
+ * The backlight task will smoothly transition to this target brightness.
+ * 
+ * @param brightness Target brightness level (0-255).
+ */
+void bsp_backlight_set_target(uint8_t brightness);
 
 #endif

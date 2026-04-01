@@ -10,6 +10,14 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+/** @brief Current brightness level of the backlight (0-255) */
+static uint8_t current_brightness = 0;
+/** @brief Target brightness level of the backlight to transition to (0-255) */
+static uint8_t target_brightness  = 255;
+/** @brief Amount to change the brightness per step */
+#define RAMP_STEP  2      // how much it changes per tick
+/** @brief Interval between brightness changes in milliseconds */
+#define RAMP_MS    20     // how often do the changes in ms
 
 
 
@@ -21,7 +29,7 @@
  *
  * @return esp_err_t ESP_OK on success, or ESP_ERR_INVALID_ARG on failure.
  */
-esp_err_t init_display_led(void)
+esp_err_t init_display(void)
 {
     // pin reset for backlight  
     if (gpio_reset_pin(BSP_TFT_BL) == ESP_ERR_INVALID_ARG)
@@ -59,8 +67,9 @@ esp_err_t init_display_led(void)
     };
     ESP_ERROR_CHECK(ledc_channel_config(&ch));
 
-    bsp_backlight_set(0);
-
+    // creating and starting task
+    xTaskCreate(backlight_task, "backlight", 2048, NULL, 0, NULL);
+    bsp_backlight_set_target(120);
     // if all goes well, return ESP_OK
     return ESP_OK;
 }
@@ -74,4 +83,41 @@ esp_err_t init_display_led(void)
 void bsp_backlight_set(uint8_t backlight) {
     ledc_set_duty(LEDC_LOW_SPEED_MODE, BSP_BL_LEDC_CHANNEL, backlight);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, BSP_BL_LEDC_CHANNEL);
+}
+
+
+/**
+ * @brief Sets the target brightness for the backlight.
+ * 
+ * The backlight_task will smoothly transition to this target brightness.
+ * 
+ * @param brightness Target brightness level (0-255).
+ */
+void bsp_backlight_set_target(uint8_t brightness) {
+    target_brightness = brightness;
+}
+
+/**
+ * @brief FreeRTOS task that manages smooth backlight brightness transitions.
+ * 
+ * This task constantly runs and updates the backlight duty cycle towards the
+ * target brightness to create fading effects.
+ * 
+ * @param pvParameters Task parameters (not used).
+ */
+void backlight_task(void *pvParameters) {
+    while (1) {
+        if (current_brightness < target_brightness) {
+            current_brightness += RAMP_STEP;
+            if (current_brightness > target_brightness)
+                current_brightness = target_brightness;
+        } else if (current_brightness > target_brightness) {
+            current_brightness -= RAMP_STEP;
+            if (current_brightness < target_brightness)
+                current_brightness = target_brightness;
+        }
+
+        bsp_backlight_set(current_brightness);
+        vTaskDelay(pdMS_TO_TICKS(RAMP_MS));
+    }
 }
