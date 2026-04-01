@@ -101,7 +101,7 @@ esp_err_t init_RGB_led(void)
         ESP_ERROR_CHECK(ledc_channel_config(&ch));
     }
     // creating and starting task
-    xTaskCreate(led_effect_task, "led_effect", 4096, NULL, 5, NULL);
+    xTaskCreate(led_effect_task, "led_effect", 2048, NULL, 0, NULL);
     // if all goes well, return ESP_OK
     return ESP_OK;
 }
