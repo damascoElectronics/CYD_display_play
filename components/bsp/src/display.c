@@ -10,6 +10,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+
+/** @brief Mutex to protect multithreaded access to brightness variables */
+static SemaphoreHandle_t brightness_mutex = NULL;
 /** @brief Current brightness level of the backlight (0-255) */
 static uint8_t current_brightness = 0;
 /** @brief Target brightness level of the backlight to transition to (0-255) */
@@ -18,7 +21,6 @@ static uint8_t target_brightness  = 255;
 #define RAMP_STEP  2      // how much it changes per tick
 /** @brief Interval between brightness changes in milliseconds */
 #define RAMP_MS    20     // how often do the changes in ms
-
 
 
 /**
@@ -67,6 +69,7 @@ esp_err_t init_display(void)
     };
     ESP_ERROR_CHECK(ledc_channel_config(&ch));
 
+    brightness_mutex = xSemaphoreCreateMutex();
     // creating and starting task
     xTaskCreate(backlight_task, "backlight", 2048, NULL, 0, NULL);
     bsp_backlight_set_target(120);
@@ -94,7 +97,24 @@ void bsp_backlight_set(uint8_t backlight) {
  * @param brightness Target brightness level (0-255).
  */
 void bsp_backlight_set_target(uint8_t brightness) {
-    target_brightness = brightness;
+    if (xSemaphoreTake(brightness_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        target_brightness = brightness;
+        xSemaphoreGive(brightness_mutex);
+    }
+}
+
+/**
+ * @brief Thread-safe getter for the target brightness.
+ * 
+ * @return uint8_t Current target brightness level.
+ */
+static uint8_t get_target_brightness(void) {
+    uint8_t val = 255;
+    if (xSemaphoreTake(brightness_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        val = target_brightness;
+        xSemaphoreGive(brightness_mutex);
+    }
+    return val;
 }
 
 /**
@@ -106,7 +126,17 @@ void bsp_backlight_set_target(uint8_t brightness) {
  * @param pvParameters Task parameters (not used).
  */
 void backlight_task(void *pvParameters) {
+
+    uint8_t new_target;
+
     while (1) {
+        new_target = (uint8_t)(255 - (bsp_ldr_read() * 255 / 4095));
+        if (abs((int)new_target - (int)get_target_brightness()) > 5) 
+        {
+            bsp_backlight_set_target(new_target);
+        }
+        printf("new_target: %d\n",new_target);
+
         if (current_brightness < target_brightness) {
             current_brightness += RAMP_STEP;
             if (current_brightness > target_brightness)

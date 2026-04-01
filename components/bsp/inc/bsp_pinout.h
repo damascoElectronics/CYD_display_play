@@ -12,6 +12,7 @@
 #define BSP_LED_G       16
 /** @brief Blue LED GPIO pin */
 #define BSP_LED_B       17
-
+/** @brief LDR sensor pin */
+#define BSP_LDR_GPIO    34
 
 #endif

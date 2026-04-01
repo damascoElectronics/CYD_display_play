@@ -13,11 +13,12 @@
 /**
  * @brief Main application entry point.
  * 
- * Initializes the RGB LED and the display.
+ * Initializes the RGB LED, the display, and the LDR sensor.
  */
 void app_main(void)
 {
     printf("init program\n");
     init_RGB_led();
     init_display();
+    bsp_ldr_init();
 }
