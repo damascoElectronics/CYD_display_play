@@ -68,8 +68,10 @@ esp_err_t turn_on_RGB_led(void);
  * @param r Red value (0-255).
  * @param g Green value (0-255).
  * @param b Blue value (0-255).
+ *
+ * @return esp_err_t ESP_OK on success.
  */
-void bsp_led_set(uint8_t r, uint8_t g, uint8_t b);
+esp_err_t bsp_led_set(uint8_t r, uint8_t g, uint8_t b);
 
 /**
  * @brief FreeRTOS task that runs a lighting effect on the RGB LED.

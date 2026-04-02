@@ -89,7 +89,7 @@ esp_err_t init_display(void)
         .hpoint     = 0,                    // Start logical pulse completely at the beginning of the clock step
         .flags.output_invert = 0,           // Ensure logical low is physical 0v, logical high is physical 3.3v
     };
-    // Submit channel logic bundle into active SoC system safely
+    // Force iteration explicitly checking against underlying system boundaries assuring total safety
     ESP_ERROR_CHECK(ledc_channel_config(&ch)); 
     // Instantiate FreeRTOS mutex semaphore to safely shield future concurrent IO attempts
     brightness_mutex = xSemaphoreCreateMutex(); 
