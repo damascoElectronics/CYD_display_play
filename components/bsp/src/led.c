@@ -178,13 +178,13 @@ esp_err_t bsp_led_set(uint8_t r, uint8_t g, uint8_t b)
         return ESP_ERR_INVALID_ARG;
     }
     // Establish modified Green parameters converting 255-oriented mapping translating native polarity configurations inversely 
-    if (ledc_set_duty(LEDC_LOW_SPEED_MODE, BSP_LED_CH_R, 255 - g) == ESP_ERR_INVALID_ARG)
+    if (ledc_set_duty(LEDC_LOW_SPEED_MODE, BSP_LED_CH_G, 255 - g) == ESP_ERR_INVALID_ARG)
     {
         // Escalate fault upstream, return ESP_ERR_INVALID_ARG
         return ESP_ERR_INVALID_ARG;
     }
     // Establish modified Blue parameters converting 255-oriented mapping translating native polarity configurations inversely
-    if (ledc_set_duty(LEDC_LOW_SPEED_MODE, BSP_LED_CH_R, 255 - b) == ESP_ERR_INVALID_ARG)
+    if (ledc_set_duty(LEDC_LOW_SPEED_MODE, BSP_LED_CH_B, 255 - b) == ESP_ERR_INVALID_ARG)
     {
         // Escalate fault upstream, return ESP_ERR_INVALID_ARG
         return ESP_ERR_INVALID_ARG;
