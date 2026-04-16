@@ -8,6 +8,7 @@
 #include "driver/gpio.h"
 #include "bsp_pinout.h"
 #include "bsp.h"
+#include "spi_bus.h"
 #include "esp_err.h"
 
 /**
@@ -19,6 +20,8 @@ void app_main(void)
 {
     printf("init program\n");
     init_RGB_led();
+    init_spi();
     init_display();
     bsp_ldr_init();
+
 }
