@@ -28,6 +28,13 @@
 
 /** @brief TFT Backlight GPIO pin */
 #define BSP_TFT_BL 21
+/** @brief TFT  GPIO Chip Selectrt pin */
+#define BSP_TFT_CS   15
+/** @brief TFT GPIO Data/Command */
+#define BSP_TFT_DC    2
+/** @brief TFT LCD rest command */
+#define BSP_TFT_RST  -1
+
 /** @brief Timer used for TFT Backlight */
 #define BSP_BL_LEDC_TIMER LEDC_TIMER_0
 /** @brief LEDC channel for TFT Backlight */
