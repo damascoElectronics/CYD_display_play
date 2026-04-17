@@ -24,4 +24,5 @@ void app_main(void)
     init_display();
     bsp_ldr_init();
 
+
 }

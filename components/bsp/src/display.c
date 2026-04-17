@@ -29,11 +29,19 @@ static uint8_t target_brightness  = 255;
 /** @brief Interval between brightness changes in milliseconds */
 #define RAMP_MS    20
 
+/** @brief Hight pixel display value */
+#define LCD_HI_RES 320
+/** @brief Lenght pixel display value */
+#define LCD_VE_RES 240
+
 /** @brief Macro to find the minimum of two values */
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 /** @brief Macro to find the maximum of two values */
 #define MAX(a, b) ((a) > (b) ? (a) : (b)) 
+
+esp_lcd_panel_handle_t panel_handle = NULL;
+esp_lcd_panel_io_handle_t io_handle = NULL;
 
 /**
  * @brief Steps a current value closer to a target value by at most a specified step size.
@@ -103,7 +111,6 @@ esp_err_t init_display(void)
     bsp_backlight_set_target(120);
    
    // LCD IO
-    esp_lcd_panel_io_handle_t io_handle = NULL;
     esp_lcd_panel_io_spi_config_t io_config = {
         .dc_gpio_num = BSP_TFT_DC,
         .cs_gpio_num = BSP_TFT_CS,
@@ -116,7 +123,6 @@ esp_err_t init_display(void)
     esp_lcd_new_panel_io_spi(SPI2_HOST, &io_config, &io_handle);
    
     // Panel ILI9341
-    esp_lcd_panel_handle_t panel_handle = NULL;
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = BSP_TFT_RST,
         .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
@@ -129,6 +135,8 @@ esp_err_t init_display(void)
     esp_lcd_panel_swap_xy(panel_handle, true);
     esp_lcd_panel_mirror(panel_handle, true, false);
     esp_lcd_panel_disp_on_off(panel_handle, true);
+
+    xTaskCreate(display_effect_task, "display_effect", 2048, NULL, 0, NULL);
 
    
     return ESP_OK;                   
@@ -242,3 +250,30 @@ static uint8_t step_toward(uint8_t current, uint8_t target, uint8_t step)
     // Should values be entirely synced, return unmodified
     return current;
 }                                    
+
+void color_screen(uint16_t color)
+{
+    uint16_t *color_buf = heap_caps_malloc(LCD_HI_RES * sizeof(uint16_t), MALLOC_CAP_DMA);
+    for (int i = 0; i < LCD_HI_RES; i++)  // rojo en RGB565
+    {
+        color_buf[i] = color;
+    }
+    for (int y = 0; y < LCD_VE_RES; y++) 
+    {
+        esp_lcd_panel_draw_bitmap(panel_handle, 0, y, LCD_HI_RES, y + 1, color_buf);
+    }
+    printf("Pantalla roja!\n");
+    free(color_buf);
+}
+
+
+void display_effect_task(void *pvParameters) {
+    uint16_t hue = 0;
+    
+    while (1) 
+    {
+        color_screen(hue);
+        hue++;
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+}
