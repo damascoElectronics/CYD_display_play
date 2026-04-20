@@ -40,8 +40,15 @@ static uint8_t target_brightness  = 255;
 /** @brief Macro to find the maximum of two values */
 #define MAX(a, b) ((a) > (b) ? (a) : (b)) 
 
+#define RGB888_TO_565(r, g, b)  (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3))
+
 esp_lcd_panel_handle_t panel_handle = NULL;
 esp_lcd_panel_io_handle_t io_handle = NULL;
+// buffer para el frame completo
+static uint16_t *frame_buffer = NULL;
+// semáforo para sincronizar el DMA
+static SemaphoreHandle_t dma_done = NULL;
+
 
 /**
  * @brief Steps a current value closer to a target value by at most a specified step size.
@@ -56,6 +63,13 @@ esp_lcd_panel_io_handle_t io_handle = NULL;
  */
 static uint8_t step_toward(uint8_t current, uint8_t target, uint8_t step); 
 
+static bool on_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
+                                 esp_lcd_panel_io_event_data_t *edata,
+                                 void *user_ctx) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xSemaphoreGiveFromISR(dma_done, &xHigherPriorityTaskWoken);
+    return xHigherPriorityTaskWoken == pdTRUE;
+}
 /**
  * @brief Initializes the display and configure it for its use.
  * 
@@ -66,79 +80,68 @@ static uint8_t step_toward(uint8_t current, uint8_t target, uint8_t step);
  */
 esp_err_t init_display(void)
 {
-    // Call ESP hardware layer to reset config on backlight pin
-    if (gpio_reset_pin(BSP_TFT_BL) == ESP_ERR_INVALID_ARG) 
-    {
-        // If reset fails due to invalid parameters: return ESP_ERR_INVALID_ARG
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    // Request ESP config layer direct backlight pin out
-    if (gpio_set_direction(BSP_TFT_BL, GPIO_MODE_OUTPUT) == ESP_ERR_INVALID_ARG)
-    {
-        // If configuration rejects invalid parameters: return ESP_ERR_INVALID_ARG
-        return ESP_ERR_INVALID_ARG;
-    }
-    // Instantiate and fill an LED Controller timer config packet
+    if (gpio_reset_pin(BSP_TFT_BL) == ESP_ERR_INVALID_ARG) return ESP_ERR_INVALID_ARG;
+    if (gpio_set_direction(BSP_TFT_BL, GPIO_MODE_OUTPUT) == ESP_ERR_INVALID_ARG) return ESP_ERR_INVALID_ARG;
+
     ledc_timer_config_t timer = {    
-        .speed_mode      = LEDC_LOW_SPEED_MODE, // Assure timer runs in simple low speed mode
-        .timer_num       = BSP_BL_LEDC_TIMER,   // Link timer to the enumerated BSP timer slot
-        .duty_resolution = BSP_BL_LEDC_RES,     // Assign the max resolution to defined bounds
-        .freq_hz         = BSP_BL_LEDC_FREQ,    // Assign PWM frequency equal to standard defaults
-        .clk_cfg         = LEDC_AUTO_CLK,       // Let subsystem automatically assign the best stable system clock
+        .speed_mode      = LEDC_LOW_SPEED_MODE,
+        .timer_num       = BSP_BL_LEDC_TIMER,
+        .duty_resolution = BSP_BL_LEDC_RES,
+        .freq_hz         = BSP_BL_LEDC_FREQ,
+        .clk_cfg         = LEDC_AUTO_CLK,
     };
-    // Apply constructed timer profile checking hardware bounds automatically
     ESP_ERROR_CHECK(ledc_timer_config(&timer));
-    // Give internal hardware states 10 milliseconds to physically latch logic levels
     vTaskDelay(pdMS_TO_TICKS(10));
-    // Instantiate and fill an LED Controller channel config packet connecting specific GPIO
+
     ledc_channel_config_t ch = {
-        .gpio_num   = BSP_TFT_BL,           // Select physical pin bound mapped for TFT backlight
-        .speed_mode = LEDC_LOW_SPEED_MODE,  // Synchronize channel output speed mapping
-        .channel    = BSP_BL_LEDC_CHANNEL,  // Hook config logic to targeted channel hardware generator
-        .timer_sel  = BSP_BL_LEDC_TIMER,    // Hook channel profile explicitly to customized running timer
-        .duty       = 255,                  // Immediately force maximum duty cycle logic onto pin buffer (full power startup)
-        .hpoint     = 0,                    // Start logical pulse completely at the beginning of the clock step
-        .flags.output_invert = 0,           // Ensure logical low is physical 0v, logical high is physical 3.3v
+        .gpio_num            = BSP_TFT_BL,
+        .speed_mode          = LEDC_LOW_SPEED_MODE,
+        .channel             = BSP_BL_LEDC_CHANNEL,
+        .timer_sel           = BSP_BL_LEDC_TIMER,
+        .duty                = 255,
+        .hpoint              = 0,
+        .flags.output_invert = 0,
     };
-    // Force iteration explicitly checking against underlying system boundaries assuring total safety
     ESP_ERROR_CHECK(ledc_channel_config(&ch)); 
-    // Instantiate FreeRTOS mutex semaphore to safely shield future concurrent IO attempts
+
     brightness_mutex = xSemaphoreCreateMutex(); 
-    // Launch parallel FreeRTOS agent running dynamic fading
-    xTaskCreate(backlight_task, "backlight", 2048, NULL, 0, NULL); 
-    // Enqueue system fading goal explicitly targeting 120 (mid-scale glow)
-    bsp_backlight_set_target(120);
-   
-   // LCD IO
+    dma_done = xSemaphoreCreateBinary();  // <-- 1. semáforo antes del io_config
+
+    // 2. io_config declarado ANTES de usarlo, con callback incluido
     esp_lcd_panel_io_spi_config_t io_config = {
-        .dc_gpio_num = BSP_TFT_DC,
-        .cs_gpio_num = BSP_TFT_CS,
-        .pclk_hz = 40 * 1000 * 1000,
-        .lcd_cmd_bits = 8,
-        .lcd_param_bits = 8,
-        .spi_mode = 0,
-        .trans_queue_depth = 10,
+        .dc_gpio_num         = BSP_TFT_DC,
+        .cs_gpio_num         = BSP_TFT_CS,
+        .pclk_hz             = 40 * 1000 * 1000,
+        .lcd_cmd_bits        = 8,
+        .lcd_param_bits      = 8,
+        .spi_mode            = 0,
+        .trans_queue_depth   = 1,
+        .on_color_trans_done = on_color_trans_done,  // <-- callback
+        .user_ctx            = NULL,
     };
-    esp_lcd_new_panel_io_spi(SPI2_HOST, &io_config, &io_handle);
-   
-    // Panel ILI9341
+    esp_lcd_new_panel_io_spi(SPI2_HOST, &io_config, &io_handle);  // <-- 3. una sola llamada
+
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = BSP_TFT_RST,
-        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
+        .rgb_ele_order  = LCD_RGB_ELEMENT_ORDER_BGR,
         .bits_per_pixel = 16,
     };
     esp_lcd_new_panel_ili9341(io_handle, &panel_config, &panel_handle);
 
     esp_lcd_panel_reset(panel_handle);
     esp_lcd_panel_init(panel_handle);
+    esp_lcd_panel_invert_color(panel_handle, false);
     esp_lcd_panel_swap_xy(panel_handle, true);
     esp_lcd_panel_mirror(panel_handle, true, false);
     esp_lcd_panel_disp_on_off(panel_handle, true);
 
-    xTaskCreate(display_effect_task, "display_effect", 2048, NULL, 0, NULL);
+    // 4. aloca frame_buffer en DMA
+    frame_buffer = heap_caps_malloc(LCD_HI_RES * LCD_VE_RES * sizeof(uint16_t), MALLOC_CAP_DMA);
+    if (frame_buffer == NULL) return ESP_ERR_NO_MEM;
 
-   
+    xTaskCreate(backlight_task, "backlight", 4096, NULL, 1, NULL);
+    bsp_backlight_set_target(120);
+    xTaskCreate(display_effect_task, "display_effect", 8192, NULL, 1, NULL);
     return ESP_OK;                   
 }
 
@@ -204,6 +207,7 @@ static uint8_t get_target_brightness(void)
  */
 void backlight_task(void *pvParameters) 
 {
+    printf("backlight_task started\n"); 
     // Declare static internal stack state variable keeping track of latest LDR math
     uint8_t new_target;
     // Commit to infinite loop explicitly necessary for standard FreeRTOS task layouts
@@ -251,29 +255,63 @@ static uint8_t step_toward(uint8_t current, uint8_t target, uint8_t step)
     return current;
 }                                    
 
-void color_screen(uint16_t color)
-{
-    uint16_t *color_buf = heap_caps_malloc(LCD_HI_RES * sizeof(uint16_t), MALLOC_CAP_DMA);
-    for (int i = 0; i < LCD_HI_RES; i++)  // rojo en RGB565
-    {
-        color_buf[i] = color;
+
+void color_screen(uint16_t color) {
+    // swap bytes para big-endian
+    uint16_t swapped = (color >> 8) | (color << 8);
+    
+    xSemaphoreTake(dma_done, 0);
+    for (int i = 0; i < LCD_HI_RES * LCD_VE_RES; i++) {
+        frame_buffer[i] = swapped;
     }
-    for (int y = 0; y < LCD_VE_RES; y++) 
-    {
-        esp_lcd_panel_draw_bitmap(panel_handle, 0, y, LCD_HI_RES, y + 1, color_buf);
-    }
-    printf("Pantalla roja!\n");
-    free(color_buf);
+    esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, LCD_HI_RES, LCD_VE_RES, frame_buffer);
+    xSemaphoreTake(dma_done, portMAX_DELAY);
 }
 
 
-void display_effect_task(void *pvParameters) {
-    uint16_t hue = 0;
-    
-    while (1) 
+uint16_t add_state(uint16_t hue, uint16_t opt, bool state)
+{
+    if (state)
     {
-        color_screen(hue);
-        hue++;
-        vTaskDelay(pdMS_TO_TICKS(1));
+        hue = hue + opt;
+    }
+    else
+    {
+        hue = hue - opt;
+    } 
+    return hue;
+}
+
+void display_effect_task(void *pvParameters) {
+    printf("display_effect_task started\n"); 
+    while (1) {
+        // negro a rojo: solo 32 pasos reales
+        for (int i = 0; i < 32; i++) {
+            printf("i=%d\n", i);
+            color_screen(i << 11);
+            vTaskDelay(pdMS_TO_TICKS(60));
+        }
+        printf("NEGRO A ROJO\n");
+        // rojo a amarillo: 64 pasos (verde tiene 6 bits)
+        for (int i = 0; i < 64; i++) {
+            printf("i=%d\n", i);
+            color_screen(0xF800 | (i << 5));
+            vTaskDelay(pdMS_TO_TICKS(60));
+        }
+        printf("ROJO A MORADO\n");
+        // amarillo a blanco: 32 pasos
+        for (int i = 0; i < 32; i++) {
+            printf("i=%d\n", i);
+            color_screen(0xFFE0 | i);
+            vTaskDelay(pdMS_TO_TICKS(60));
+        }
+        printf("MORADO A BLANCO\n");
+        // blanco a negro
+        for (int i = 0xFFFF; i >= 0; i -= 0x0841) {
+            printf("i=%d\n", i);
+            color_screen((uint16_t)i);
+            vTaskDelay(pdMS_TO_TICKS(60));
+        }
+        printf("BANCO A NEGRO\n");
     }
 }
