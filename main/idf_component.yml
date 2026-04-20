@@ -2,3 +2,5 @@ dependencies:
   idf: ">=5.0"
   espressif/esp_lcd_ili9341:
     version: "*"
+  lvgl/lvgl:
+    version: "~9.0.0"
