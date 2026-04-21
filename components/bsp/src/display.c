@@ -44,9 +44,9 @@ static uint8_t target_brightness  = 255;
 
 esp_lcd_panel_handle_t panel_handle = NULL;
 esp_lcd_panel_io_handle_t io_handle = NULL;
-// buffer para el frame completo
+/** @brief Buffer for the complete frame */
 static uint16_t *frame_buffer = NULL;
-// semáforo para sincronizar el DMA
+/** @brief Semaphore to synchronize DMA transfers */
 static SemaphoreHandle_t dma_done = NULL;
 
 
@@ -63,6 +63,14 @@ static SemaphoreHandle_t dma_done = NULL;
  */
 static uint8_t step_toward(uint8_t current, uint8_t target, uint8_t step); 
 
+/**
+ * @brief Callback invoked when a color transfer is completed.
+ * 
+ * @param panel_io Panel I/O handle.
+ * @param edata Pointer to the event data.
+ * @param user_ctx User-defined context data.
+ * @return bool True if a higher priority task was woken, false otherwise.
+ */
 static bool on_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
                                  esp_lcd_panel_io_event_data_t *edata,
                                  void *user_ctx) {
@@ -105,9 +113,9 @@ esp_err_t init_display(void)
     ESP_ERROR_CHECK(ledc_channel_config(&ch)); 
 
     brightness_mutex = xSemaphoreCreateMutex(); 
-    dma_done = xSemaphoreCreateBinary();  // <-- 1. semáforo antes del io_config
+    dma_done = xSemaphoreCreateBinary();  // 1. Create binary semaphore before io_config
 
-    // 2. io_config declarado ANTES de usarlo, con callback incluido
+    // 2. Declare io_config BEFORE using it, including the callback
     esp_lcd_panel_io_spi_config_t io_config = {
         .dc_gpio_num         = BSP_TFT_DC,
         .cs_gpio_num         = BSP_TFT_CS,
@@ -116,10 +124,10 @@ esp_err_t init_display(void)
         .lcd_param_bits      = 8,
         .spi_mode            = 0,
         .trans_queue_depth   = 1,
-        .on_color_trans_done = on_color_trans_done,  // <-- callback
+        .on_color_trans_done = on_color_trans_done,  // Callback to signal DMA finish
         .user_ctx            = NULL,
     };
-    esp_lcd_new_panel_io_spi(SPI2_HOST, &io_config, &io_handle);  // <-- 3. una sola llamada
+    esp_lcd_new_panel_io_spi(SPI2_HOST, &io_config, &io_handle);  // 3. One single call to initialize
 
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = BSP_TFT_RST,
@@ -135,7 +143,7 @@ esp_err_t init_display(void)
     esp_lcd_panel_mirror(panel_handle, true, false);
     esp_lcd_panel_disp_on_off(panel_handle, true);
 
-    // 4. aloca frame_buffer en DMA
+    // 4. Allocate frame_buffer in DMA
     frame_buffer = heap_caps_malloc(LCD_HI_RES * LCD_VE_RES * sizeof(uint16_t), MALLOC_CAP_DMA);
     if (frame_buffer == NULL) return ESP_ERR_NO_MEM;
 
@@ -256,8 +264,13 @@ static uint8_t step_toward(uint8_t current, uint8_t target, uint8_t step)
 }                                    
 
 
+/**
+ * @brief Fills the entire display screen with a given color.
+ * 
+ * @param color 16-bit RGB565 color value.
+ */
 void color_screen(uint16_t color) {
-    // swap bytes para big-endian
+    // Swap bytes for big-endian format
     uint16_t swapped = (color >> 8) | (color << 8);
     
     xSemaphoreTake(dma_done, 0);
@@ -269,6 +282,14 @@ void color_screen(uint16_t color) {
 }
 
 
+/**
+ * @brief Computes a new hue value based on a given state.
+ * 
+ * @param hue The current hue value.
+ * @param opt The offset value to add or subtract.
+ * @param state Boolean indicating whether to add (true) or subtract (false) the offset.
+ * @return uint16_t The newly computed hue value.
+ */
 uint16_t add_state(uint16_t hue, uint16_t opt, bool state)
 {
     if (state)
@@ -282,36 +303,43 @@ uint16_t add_state(uint16_t hue, uint16_t opt, bool state)
     return hue;
 }
 
+/**
+ * @brief FreeRTOS task handling a display color cycling effect.
+ * 
+ * Cycles the display color through various sequences demonstrating DMA transfer.
+ * 
+ * @param pvParameters Pointer to task parameters (not used).
+ */
 void display_effect_task(void *pvParameters) {
     printf("display_effect_task started\n"); 
     while (1) {
-        // negro a rojo: solo 32 pasos reales
+        // Black to Red: 32 actual steps mapped
         for (int i = 0; i < 32; i++) {
             printf("i=%d\n", i);
             color_screen(i << 11);
             vTaskDelay(pdMS_TO_TICKS(60));
         }
-        printf("NEGRO A ROJO\n");
-        // rojo a amarillo: 64 pasos (verde tiene 6 bits)
+        printf("BLACK TO RED\n");
+        // Red to Yellow: 64 steps (Green has 6 bits in RGB565)
         for (int i = 0; i < 64; i++) {
             printf("i=%d\n", i);
             color_screen(0xF800 | (i << 5));
             vTaskDelay(pdMS_TO_TICKS(60));
         }
-        printf("ROJO A MORADO\n");
-        // amarillo a blanco: 32 pasos
+        printf("RED TO YELLOW\n");
+        // Yellow to White: 32 steps
         for (int i = 0; i < 32; i++) {
             printf("i=%d\n", i);
             color_screen(0xFFE0 | i);
             vTaskDelay(pdMS_TO_TICKS(60));
         }
-        printf("MORADO A BLANCO\n");
-        // blanco a negro
+        printf("YELLOW TO WHITE\n");
+        // White to Black transition
         for (int i = 0xFFFF; i >= 0; i -= 0x0841) {
             printf("i=%d\n", i);
             color_screen((uint16_t)i);
             vTaskDelay(pdMS_TO_TICKS(60));
         }
-        printf("BANCO A NEGRO\n");
+        printf("WHITE TO BLACK\n");
     }
 }
