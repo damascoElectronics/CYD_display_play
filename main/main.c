@@ -23,6 +23,7 @@ void app_main(void)
     init_spi();
     init_display();
     bsp_ldr_init();
+    bsp_lvgl_init(); 
 
 
 }

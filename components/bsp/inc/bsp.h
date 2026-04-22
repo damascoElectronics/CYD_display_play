@@ -144,5 +144,6 @@ int bsp_ldr_read_mv(void);
 
 void color_screen(uint16_t color);
 void display_effect_task(void *pvParameters);
+esp_err_t bsp_lvgl_init(void);
 
 #endif

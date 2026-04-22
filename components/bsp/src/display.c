@@ -13,6 +13,7 @@
 #include "esp_lcd_panel_vendor.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_ili9341.h"
+#include "lvgl.h"
 
 /** @brief Mutex to protect multithreaded access to brightness variables */
 static SemaphoreHandle_t brightness_mutex = NULL;
@@ -44,6 +45,8 @@ static uint8_t target_brightness  = 255;
 
 esp_lcd_panel_handle_t panel_handle = NULL;
 esp_lcd_panel_io_handle_t io_handle = NULL;
+static lv_display_t *lv_display = NULL;
+
 /** @brief Buffer for the complete frame */
 static uint16_t *frame_buffer = NULL;
 /** @brief Semaphore to synchronize DMA transfers */
@@ -78,6 +81,18 @@ static bool on_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
     xSemaphoreGiveFromISR(dma_done, &xHigherPriorityTaskWoken);
     return xHigherPriorityTaskWoken == pdTRUE;
 }
+
+
+// callback que LVGL llama cuando tiene pixels para enviar
+static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
+    esp_lcd_panel_draw_bitmap(panel_handle,
+        area->x1, area->y1,
+        area->x2 + 1, area->y2 + 1,
+        px_map);
+    lv_display_flush_ready(disp);
+}
+
+
 /**
  * @brief Initializes the display and configure it for its use.
  * 
@@ -342,4 +357,26 @@ void display_effect_task(void *pvParameters) {
         }
         printf("WHITE TO BLACK\n");
     }
+}
+
+
+// task que llama lv_timer_handler periodicamente
+static void lvgl_task(void *pvParameters) {
+    while (1) {
+        lv_timer_handler();
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+}
+
+esp_err_t bsp_lvgl_init(void) {
+    lv_init();
+
+    lv_display = lv_display_create(LCD_HI_RES, LCD_VE_RES);
+    lv_display_set_flush_cb(lv_display, lvgl_flush_cb);
+    lv_display_set_buffers(lv_display, frame_buffer, NULL,
+        LCD_HI_RES * LCD_VE_RES * sizeof(uint16_t),
+        LV_DISPLAY_RENDER_MODE_FULL);
+
+    xTaskCreate(lvgl_task, "lvgl", 8192, NULL, 2, NULL);
+    return ESP_OK;
 }
