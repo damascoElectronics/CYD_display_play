@@ -13,6 +13,7 @@
 #include "esp_lcd_panel_vendor.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_ili9341.h"
+#include "esp_lvgl_port.h"
 #include "lvgl.h"
 
 /** @brief Mutex to protect multithreaded access to brightness variables */
@@ -43,6 +44,12 @@ static uint8_t target_brightness  = 255;
 
 #define RGB888_TO_565(r, g, b)  (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3))
 
+// buffer exclusivo para LVGL — 1/10 de la pantalla es suficiente
+#define LVGL_BUFFER_SIZE (LCD_HI_RES * LCD_VE_RES / 10)
+
+static uint16_t *lvgl_buffer = NULL;
+
+
 esp_lcd_panel_handle_t panel_handle = NULL;
 esp_lcd_panel_io_handle_t io_handle = NULL;
 static lv_display_t *lv_display = NULL;
@@ -51,7 +58,7 @@ static lv_display_t *lv_display = NULL;
 static uint16_t *frame_buffer = NULL;
 /** @brief Semaphore to synchronize DMA transfers */
 static SemaphoreHandle_t dma_done = NULL;
-
+static SemaphoreHandle_t lvgl_mutex = NULL;
 
 /**
  * @brief Steps a current value closer to a target value by at most a specified step size.
@@ -78,6 +85,13 @@ static bool on_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
                                  esp_lcd_panel_io_event_data_t *edata,
                                  void *user_ctx) {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    
+    // notifica a LVGL que el flush terminó
+    if (lv_display != NULL) {
+        lv_display_flush_ready(lv_display);
+    }
+    
+    // señal para color_screen si se usa fuera de LVGL
     xSemaphoreGiveFromISR(dma_done, &xHigherPriorityTaskWoken);
     return xHigherPriorityTaskWoken == pdTRUE;
 }
@@ -89,9 +103,8 @@ static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px
         area->x1, area->y1,
         area->x2 + 1, area->y2 + 1,
         px_map);
-    lv_display_flush_ready(disp);
+    // lv_display_flush_ready(disp);
 }
-
 
 /**
  * @brief Initializes the display and configure it for its use.
@@ -164,7 +177,7 @@ esp_err_t init_display(void)
 
     xTaskCreate(backlight_task, "backlight", 4096, NULL, 1, NULL);
     bsp_backlight_set_target(120);
-    xTaskCreate(display_effect_task, "display_effect", 8192, NULL, 1, NULL);
+    //xTaskCreate(display_effect_task, "display_effect", 8192, NULL, 1, NULL);
     return ESP_OK;                   
 }
 
@@ -296,28 +309,6 @@ void color_screen(uint16_t color) {
     xSemaphoreTake(dma_done, portMAX_DELAY);
 }
 
-
-/**
- * @brief Computes a new hue value based on a given state.
- * 
- * @param hue The current hue value.
- * @param opt The offset value to add or subtract.
- * @param state Boolean indicating whether to add (true) or subtract (false) the offset.
- * @return uint16_t The newly computed hue value.
- */
-uint16_t add_state(uint16_t hue, uint16_t opt, bool state)
-{
-    if (state)
-    {
-        hue = hue + opt;
-    }
-    else
-    {
-        hue = hue - opt;
-    } 
-    return hue;
-}
-
 /**
  * @brief FreeRTOS task handling a display color cycling effect.
  * 
@@ -359,24 +350,51 @@ void display_effect_task(void *pvParameters) {
     }
 }
 
-
 // task que llama lv_timer_handler periodicamente
 static void lvgl_task(void *pvParameters) {
+    printf("lvgl_task started\n");
     while (1) {
-        lv_timer_handler();
-        vTaskDelay(pdMS_TO_TICKS(5));
+        if (xSemaphoreTake(lvgl_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            uint32_t time_till_next = lv_timer_handler();
+            xSemaphoreGive(lvgl_mutex);
+            if (time_till_next > 500) time_till_next = 500;
+            if (time_till_next == 0) time_till_next = 1;
+            vTaskDelay(pdMS_TO_TICKS(time_till_next));
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
     }
 }
 
+
 esp_err_t bsp_lvgl_init(void) {
-    lv_init();
+    const lvgl_port_cfg_t lvgl_cfg = ESP_LVGL_PORT_INIT_CONFIG();
+    lvgl_port_init(&lvgl_cfg);
 
-    lv_display = lv_display_create(LCD_HI_RES, LCD_VE_RES);
-    lv_display_set_flush_cb(lv_display, lvgl_flush_cb);
-    lv_display_set_buffers(lv_display, frame_buffer, NULL,
-        LCD_HI_RES * LCD_VE_RES * sizeof(uint16_t),
-        LV_DISPLAY_RENDER_MODE_FULL);
+    const lvgl_port_display_cfg_t disp_cfg = {
+        .io_handle    = io_handle,
+        .panel_handle = panel_handle,
+        .buffer_size  = LCD_HI_RES * LCD_VE_RES / 8,
+        .double_buffer = false,
+        .hres         = LCD_HI_RES,
+        .vres         = LCD_VE_RES,
+        .monochrome   = false,
+        .rotation = {
+            .swap_xy  = false,
+            .mirror_x = false,
+            .mirror_y = false,
+        },
+        .flags = {
+            .buff_dma = true,
+        }
+    };
+    lv_display = lvgl_port_add_disp(&disp_cfg);
 
-    xTaskCreate(lvgl_task, "lvgl", 8192, NULL, 2, NULL);
+    lvgl_port_lock(0);
+    lv_obj_t *label = lv_label_create(lv_screen_active());
+    lv_label_set_text(label, "CYD Radio");
+    lv_obj_center(label);
+    lvgl_port_unlock();
+
     return ESP_OK;
 }

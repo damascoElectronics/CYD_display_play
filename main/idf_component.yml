@@ -4,3 +4,5 @@ dependencies:
     version: "*"
   lvgl/lvgl:
     version: "~9.0.0"
+  espressif/esp_lvgl_port:
+    version: "^2.3.0"
