@@ -374,13 +374,13 @@ esp_err_t bsp_lvgl_init(void) {
     const lvgl_port_display_cfg_t disp_cfg = {
         .io_handle    = io_handle,
         .panel_handle = panel_handle,
-        .buffer_size  = LCD_HI_RES * LCD_VE_RES / 8,
+        .buffer_size  = LCD_HI_RES * LCD_VE_RES / 4,
         .double_buffer = false,
         .hres         = LCD_HI_RES,
         .vres         = LCD_VE_RES,
         .monochrome   = false,
         .rotation = {
-            .swap_xy  = false,
+            .swap_xy  = true,
             .mirror_x = false,
             .mirror_y = false,
         },
