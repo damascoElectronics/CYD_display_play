@@ -2,3 +2,5 @@ use of the module TEF6686 by tehniq3
   - https://github.com/tehniq3/TEF6686/tree/master
 Simple TEF6686 DSP AM FM tuner with ESP32 microcontroller by Mirko Pavleski
   - https://www.hackster.io/mircemk/simple-tef6686-dsp-am-fm-tuner-with-esp32-microcontroller-2bdce0
+Sintonizador AM/FM TEF DSP v1 by pe5pvb
+  - https://www.pe5pvb.nl/tef6686/
