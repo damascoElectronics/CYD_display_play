@@ -289,6 +289,7 @@ static void build_footer(lv_obj_t *parent)
     lv_obj_t *lbl = lv_label_create(footer);
     lv_label_set_text(lbl, "damascoElectronics - CYD Radio v0.1");
     lv_obj_set_style_text_color(lbl, lv_color_make(35, 35, 35), 0);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_10, 0);
     lv_obj_center(lbl);
 }
 
