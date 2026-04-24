@@ -96,16 +96,6 @@ static bool on_color_trans_done(esp_lcd_panel_io_handle_t panel_io,
     return xHigherPriorityTaskWoken == pdTRUE;
 }
 
-
-// callback que LVGL llama cuando tiene pixels para enviar
-static void lvgl_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
-    esp_lcd_panel_draw_bitmap(panel_handle,
-        area->x1, area->y1,
-        area->x2 + 1, area->y2 + 1,
-        px_map);
-    // lv_display_flush_ready(disp);
-}
-
 /**
  * @brief Initializes the display and configure it for its use.
  * 
@@ -386,6 +376,7 @@ esp_err_t bsp_lvgl_init(void) {
         },
         .flags = {
             .buff_dma = true,
+            .swap_bytes  = true,
         }
     };
     lv_display = lvgl_port_add_disp(&disp_cfg);
