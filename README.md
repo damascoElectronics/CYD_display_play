@@ -39,10 +39,9 @@ Go to `./main/idf_component.yml`
 
 ## UI — Main Screen
 
-```
 ![alt text](https://github.com/damascoElectronics/CYD_display_play/blob/main/images/Screenshot%202026-04-24%20102428.png)
 ![alt text](https://github.com/damascoElectronics/CYD_display_play/blob/main/images/Screenshot%202026-04-24%20102510.png)
-```
+
 
 - Central display toggles between frequency (7-seg style) and spectrum analyzer on tap
 - 3x4 numpad: manual frequency entry
