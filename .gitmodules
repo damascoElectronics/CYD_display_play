@@ -1,0 +1,3 @@
+[submodule "PCB/Eagle_library"]
+	path = PCB/Eagle_library
+	url = https://github.com/tehniq3/Eagle_library.git
